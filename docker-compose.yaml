@@ -1,0 +1,243 @@
+services:
+
+  chat_sky_track_app:
+    image: chat_sky_track_app
+    container_name: ms_chat_sky_track_app
+    command: node dist/src/main
+    ports:
+      - "3001:3001"
+    depends_on:
+      - prometheus
+      - grafana
+      - chat_sky_track_cronjobs
+    env_file:
+      - ./TemporaryMsgApp/.env
+    build:
+      context: ./TemporaryMsgApp
+      dockerfile: Dockerfile
+    networks:
+      - chat_sky_track_app-network
+      - grafana
+    volumes:
+      - chat_sky_track_app:/app
+      - alloy_chat_logs_app:/usr/src/app/logs
+    restart: always
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 5
+
+  chat_sky_track_cronjobs:
+    image: chat_sky_track_cronjobs
+    container_name: ms_chat_sky_track_cronjobs
+    command: node dist/src/main
+    ports:
+      - "4000:4000"
+    depends_on:
+      - prometheus
+      - grafana
+    env_file:
+      - ./chat-skytrack-cronjobs/.env
+    build:
+      context: ./chat-skytrack-cronjobs
+      dockerfile: Dockerfile
+    networks:
+      - chat_sky_track_cronjobs-network
+      - grafana
+    volumes:
+      - chat_sky_track_cronjobs:/app
+      - alloy_cron_jobs_logs_app:/usr/src/app/logs
+    restart: always
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 5
+
+  notification-service:
+    image: chat_notification-service
+    container_name: ms_chat_notification_service
+    command: node dist/src/main
+    ports:
+      - "4002:4002"
+    depends_on:
+      - prometheus
+      - grafana
+      - chat_sky_track_app
+    env_file:
+      - ./notification-service/.env
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    networks:
+      - notification-service-network
+      - grafana
+    volumes:
+      - notification-service:/app
+      - alloy_notification_logs_app:/usr/src/app/logs
+    restart: always
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:4002/health"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 5
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    user: root
+    volumes:
+      - alloy_chat_logs_app:/mnt/chat_logs:ro
+      - alloy_notification_logs_app:/mnt/chat_logs_notification:ro
+      - alloy_cron_jobs_logs_app:/mnt/chat_logs_cron_jobs:ro
+      - ./alloy/:/etc/alloy/
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - grafana
+    restart: unless-stopped
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    ports:
+      - "12345:12345"
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - loki
+      - prometheus
+
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki:/etc/loki/
+      - loki_data:/loki/
+    ports:
+      - "3100:3100"
+    networks:
+      - grafana
+    restart: unless-stopped
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    user: "0:0"
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin
+      - N8N_RUNNERS_ENABLED=true
+      - GENERIC_TIMEZONE="Europe/Zagreb"
+      - TZ=Europe/Zagreb
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true 
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    networks:
+    - notification-service-network 
+    - chat_sky_track_app-network   
+    - chat_sky_track_cronjobs-network
+    restart: unless-stopped
+
+  pushgateway:
+    image: prom/pushgateway
+    container_name: pushgateway
+    ports:
+      - "9091:9091"
+    networks:
+      - grafana
+      - chat_sky_track_cronjobs-network
+    restart: always
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:9091/-/healthy"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus:/etc/prometheus/
+    command:
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=1d'
+      - '--storage.tsdb.retention.size=512MB'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-remote-write-receiver'
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - "9090:9090"
+    networks:
+      - grafana
+      - chat_sky_track_app-network
+      - chat_sky_track_cronjobs-network
+    restart: always
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+
+
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: grafana
+    depends_on:
+      - prometheus
+    env_file:
+      - ./.env
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+    restart: always
+    networks:
+      - grafana
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+
+volumes:
+  loki_data:
+  n8n_data:
+  notification-service:
+  chat_sky_track_app:
+  chat_sky_track_cronjobs:
+  grafana_data:
+  prometheus_data:
+  alloy_chat_logs_app:
+  alloy_notification_logs_app:
+  alloy_cron_jobs_logs_app:
+
+
+networks:
+  notification-service-network:
+    driver: bridge
+
+  chat_sky_track_app-network:
+    driver: bridge
+
+  chat_sky_track_cronjobs-network:
+    driver: bridge
+
+  grafana:
+    driver: bridge

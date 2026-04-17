@@ -1,0 +1,65 @@
+groups:
+  - name: chat_app_alerts
+    rules:
+      - alert: JobDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Job {{ $labels.job }} is down"
+          description: "Target {{ $labels.instance }} of job {{ $labels.job }} is not responding for more than 1 minute."
+
+      - alert: HighHttpResponseTime
+        expr: histogram_quantile(0.95, sum(rate(rest_response_time_duration_seconds_bucket[5m])) by (le, route)) > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 95th percentile response time on route {{ $labels.route }}"
+          description: "95th percentile of response time exceeded 2s in the last 5 minutes."
+
+      - alert: HighWebSocketErrors
+        expr: rate(chat_app_socket_ws_exception_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of WebSocket errors"
+          description: "More than 5 WS exceptions occurred in the last 5 minutes."
+
+      - alert: SocketMessageDrop
+        expr: rate(chat_app_socket_messages_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No socket messages sent"
+          description: "No websocket messages were sent in the last 5 minutes."
+
+      - alert: NoHttpRequests
+        expr: rate(chat_app_http_requests_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No HTTP requests received"
+          description: "Service {{ $labels.route }} has not received requests in the last 5 minutes."
+
+      - alert: LargeHttpResponse
+        expr: histogram_quantile(0.99, sum(rate(http_response_size_bytes_bucket[5m])) by (le, route)) > 50000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large HTTP responses detected on route {{ $labels.route }}"
+          description: "99th percentile response size exceeded 50 KB in the last 5 minutes."
+
+      - alert: LargeHttpRequest
+        expr: histogram_quantile(0.99, sum(rate(http_request_size_bytes_bucket[5m])) by (le, route)) > 50000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large HTTP requests detected on route {{ $labels.route }}"
+          description: "99th percentile request size exceeded 50 KB in the last 5 minutes."

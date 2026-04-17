@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+#scrape_configs:
+  # - job_name: chat_sky_track_app_service
+  #   metrics_path: /chat_prom_metrics/metrics
+  #   static_configs:
+  #     - targets:
+  #         - 'ms_chat_sky_track_app:3001'
+
+  # - job_name: 'pushgateway'
+  #   static_configs:
+  #     - targets: ['pushgateway:9091']
+
+  # - job_name: 'chat_notification_service'
+  #   metrics_path: /prometheus-notification/metrics
+  #   static_configs:
+  #     - targets: 
+  #         - 'ms_chat_notification_service:4002'
+
+rule_files:
+  - /etc/prometheus/alert.rules.yml

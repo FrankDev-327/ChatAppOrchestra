@@ -1,0 +1,94 @@
+// --- Logging ---
+logging {
+  level = "info"
+}
+
+// ###############################
+// #### Metrics Configuration ####
+// ###############################
+
+// Scrape TempMsgChatApp app custom metrics
+prometheus.scrape "temp_chat_app" {
+  scrape_interval          = "10s"
+  scheme                   = "http"
+  metrics_path             = "/metrics"
+  scrape_native_histograms = true
+
+  targets = [
+    { __address__          = "ms_chat_sky_track_app:3001" },
+    { __address__          = "ms_chat_notification_service:4002" },
+  ]
+
+  //forward_to = [prometheus.relabel.chat_app_metrics.receiver]
+  forward_to = [prometheus.remote_write.metrics.receiver]
+
+}
+
+// Scrape Pushgateway app custom metrics
+prometheus.scrape "pushgateway" {
+  scrape_interval = "10s"
+
+  targets = [
+    { __address__ = "pushgateway:9091" },
+  ]
+
+  forward_to = [prometheus.relabel.pushgateway_metrics.receiver]
+}
+
+// ##################################################
+// #### Prometheus relabel Configuration Section ####
+// ##################################################
+prometheus.relabel "pushgateway_metrics" {
+  rule {
+    target_label = "service"
+    replacement  = "cronjobs"
+  }
+
+  forward_to = [prometheus.remote_write.metrics.receiver]
+}
+
+// --- Remote write to Prometheus ---
+prometheus.remote_write "metrics" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+// ###############################
+// #### Loki Configuration ####
+// ###############################
+local.file_match "all_chat_logs" {
+  path_targets = [
+    {
+      __path__ = "/mnt/chat_logs/*.log",
+      job = "chat-app",
+      service = "main-app",
+    },
+    {
+      __path__ = "/mnt/chat_logs_notification/*.log",
+      job = "notification-app",
+      service = "notification",
+    },
+    {
+      __path__ = "/mnt/chat_logs_cron_jobs/*.log",
+      job = "cronjobs-app",
+      service = "cronjobs",
+    },
+  ]
+}
+
+loki.source.file "chat_logs" {
+  targets    = local.file_match.all_chat_logs.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+// --- Loki destination ---
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+  wal {
+    enabled = false
+  }
+}
+
