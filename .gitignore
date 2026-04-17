@@ -3,4 +3,3 @@
 /notification-service
 .env
 *_test.js
-*.sh
