@@ -1,0 +1,141 @@
+CREATE TABLE car_trips (
+    trip_id SERIAL PRIMARY KEY,
+    car_name TEXT,
+    driver_name TEXT,
+    company_name TEXT,
+    start_location TEXT,
+    end_location TEXT,
+    distance_km NUMERIC(10,2),
+    fuel_liters NUMERIC(10,2),
+    duration_minutes INT,
+    avg_speed_kmh NUMERIC(10,2),
+    trip_cost NUMERIC(10,2),
+    started_at TIMESTAMP
+);
+
+
+SELECT
+    (ARRAY['BMW X5','Audi A4','Mercedes Actros','Volvo FH','Skoda Octavia','Ford Transit'])[floor(random()*6 + 1)],
+
+    'Driver_' || floor(random() * 1000 + 1)::int,
+    'Company_' || floor(random() * 100 + 1)::int,
+
+    'Location_' || floor(random() * 100 + 1)::int,
+    'Location_' || floor(random() * 100 + 1)::int,
+
+    round((random() * 1000 + 1)::numeric, 2),
+    round((random() * 100 + 1)::numeric, 2),
+
+    floor(random() * 300 + 1)::int,
+
+    round((random() * 120 + 1)::numeric, 2),
+
+    round((random() * 500 + 1)::numeric, 2),
+
+    NOW() - (random() * interval '30 days')
+
+FROM generate_series(1, 10000) gs;
+
+
+INSERT INTO car_trips (
+    car_name,
+    driver_name,
+    company_name,
+    start_location,
+    end_location,
+    distance_km,
+    fuel_liters,
+    duration_minutes,
+    avg_speed_kmh,
+    trip_cost,
+    started_at
+)
+SELECT
+    (ARRAY['BMW X5','Audi A4','Mercedes Actros','Volvo FH','Skoda Octavia','Ford Transit'])[floor(random()*6 + 1)],
+
+    'Driver_' || floor(random() * 1000 + 1)::int,
+    'Company_' || floor(random() * 100 + 1)::int,
+
+    'Location_' || floor(random() * 100 + 1)::int,
+    'Location_' || floor(random() * 100 + 1)::int,
+
+    round((random() * 1000 + 1)::numeric, 2),
+    round((random() * 100 + 1)::numeric, 2),
+
+    floor(random() * 300 + 1)::int,
+
+    round((random() * 120 + 1)::numeric, 2),
+
+    round((random() * 500 + 1)::numeric, 2),
+
+    TIMESTAMP '2024-01-01'
+    + random() * (TIMESTAMP '2025-12-31' - TIMESTAMP '2024-01-01')
+
+FROM generate_series(1, 10000) gs;
+
+ALTER TABLE car_trips
+ADD COLUMN start_lat NUMERIC(9,6),
+ADD COLUMN start_lng NUMERIC(9,6),
+ADD COLUMN end_lat NUMERIC(9,6),
+ADD COLUMN end_lng NUMERIC(9,6);
+
+UPDATE car_trips
+SET
+    start_lat = c1.lat,
+    start_lng = c1.lng,
+    end_lat = c2.lat,
+    end_lng = c2.lng
+FROM
+(
+    SELECT
+        trip_id,
+        (
+            ARRAY[
+                45.8150, -- Zagreb
+                43.5081, -- Split
+                45.3271, -- Rijeka
+                45.5511, -- Osijek
+                46.0569  -- Ljubljana
+            ]
+        )[floor(random()*5 + 1)] AS lat,
+
+        (
+            ARRAY[
+                15.9819,
+                16.4402,
+                14.4422,
+                18.6955,
+                14.5058
+            ]
+        )[floor(random()*5 + 1)] AS lng
+    FROM car_trips
+) c1,
+
+(
+    SELECT
+        trip_id,
+        (
+            ARRAY[
+                48.2082, -- Vienna
+                47.4979, -- Budapest
+                45.4642, -- Milan
+                44.7866, -- Belgrade
+                46.2044  -- Munich-ish
+            ]
+        )[floor(random()*5 + 1)] AS lat,
+
+        (
+            ARRAY[
+                16.3738,
+                19.0402,
+                9.1900,
+                20.4489,
+                11.5761
+            ]
+        )[floor(random()*5 + 1)] AS lng
+    FROM car_trips
+) c2
+WHERE car_trips.trip_id = c1.trip_id
+  AND car_trips.trip_id = c2.trip_id;
+
+  ALTER USER webdevuser WITH SUPERUSER;

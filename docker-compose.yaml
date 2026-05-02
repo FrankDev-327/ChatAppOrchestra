@@ -22,11 +22,6 @@ services:
       - chat_sky_track_app:/app
       - alloy_chat_logs_app:/usr/src/app/logs
     restart: always
-    # healthcheck:
-    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
-    #   interval: 15s
-    #   timeout: 5s
-    #   retries: 5
 
   chat_sky_track_cronjobs:
     image: chat_sky_track_cronjobs
@@ -49,11 +44,6 @@ services:
       - chat_sky_track_cronjobs:/app
       - alloy_cron_jobs_logs_app:/usr/src/app/logs
     restart: always
-    # healthcheck:
-    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health"]
-    #   interval: 15s
-    #   timeout: 5s
-    #   retries: 5
 
   notification-service:
     image: chat_notification-service
@@ -77,11 +67,6 @@ services:
       - notification-service:/app
       - alloy_notification_logs_app:/usr/src/app/logs
     restart: always
-    # healthcheck:
-    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:4002/health"]
-    #   interval: 15s
-    #   timeout: 5s
-    #   retries: 5
 
   alloy:
     image: grafana/alloy:latest
@@ -100,8 +85,11 @@ services:
       - /dev/disk/:/dev/disk:ro
     networks:
       - grafana
+      - db_network
     restart: unless-stopped
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    env_file:
+      - ./.env
     ports:
       - "12345:12345"
       - "4317:4317"
@@ -109,7 +97,6 @@ services:
     depends_on:
       - loki
       - prometheus
-
 
   loki:
     image: grafana/loki:3.0.0
@@ -123,11 +110,6 @@ services:
     networks:
       - grafana
     restart: unless-stopped
-    # healthcheck:
-    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
-    #   interval: 10s
-    #   timeout: 5s
-    #   retries: 5
 
   n8n:
     image: n8nio/n8n
@@ -162,12 +144,33 @@ services:
       - grafana
       - chat_sky_track_cronjobs-network
     restart: always
-    # healthcheck:
-    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:9091/-/healthy"]
-    #   interval: 10s
-    #   timeout: 5s
-    #   retries: 5
 
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    shm_size: 512mb
+    env_file:
+      - ./.env
+    environment:
+      POSTGRES_USER: ${DB_USER_NAME}
+      POSTGRES_PASSWORD: ${DB_USER_PASSWORD}
+      POSTGRES_DB: ${DATABASE}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_db_data:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
+    command: >
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
+    networks:
+      db_network:
+        ipv4_address: 10.5.0.10
+      grafana:
+      chat_sky_track_app-network:
+      chat_sky_track_cronjobs-network:
+    restart: always
 
   prometheus:
     image: prom/prometheus
@@ -188,12 +191,6 @@ services:
       - chat_sky_track_app-network
       - chat_sky_track_cronjobs-network
     restart: always
-    # healthcheck:
-    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
-    #   interval: 10s
-    #   timeout: 5s
-    #   retries: 5
-
 
   grafana:
     image: grafana/grafana-enterprise
@@ -210,15 +207,12 @@ services:
     restart: always
     networks:
       - grafana
-    # healthcheck:
-    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
-    #   interval: 10s
-    #   timeout: 5s
-    #   retries: 5
+      - db_network
 
 volumes:
   loki_data:
   n8n_data:
+  pg_db_data:
   notification-service:
   chat_sky_track_app:
   chat_sky_track_cronjobs:
@@ -227,7 +221,6 @@ volumes:
   alloy_chat_logs_app:
   alloy_notification_logs_app:
   alloy_cron_jobs_logs_app:
-
 
 networks:
   notification-service-network:
@@ -241,3 +234,10 @@ networks:
 
   grafana:
     driver: bridge
+
+  db_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/24
+          gateway: 10.5.0.1

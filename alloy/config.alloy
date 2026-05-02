@@ -19,7 +19,6 @@ prometheus.scrape "temp_chat_app" {
     { __address__          = "ms_chat_notification_service:4002" },
   ]
 
-  //forward_to = [prometheus.relabel.chat_app_metrics.receiver]
   forward_to = [prometheus.remote_write.metrics.receiver]
 
 }
@@ -92,3 +91,25 @@ loki.write "default" {
   }
 }
 
+// ###############################################
+// #### Prometheus Postgres Database Configuration #####
+// ###############################################
+
+// Srape Postgres metrics using the Postgres Exporter and forward to Prometheus
+prometheus.exporter.postgres "postgres_metrics" {
+  data_source_names = [
+    "postgresql://" +
+    env("DB_USER_NAME") + ":" +
+    env("DB_USER_PASSWORD") + "@" +
+    env("DATABASE_IP") + ":" +
+    env("DATABASE_PORT") + "/" +
+    env("DATABASE") +
+    "?sslmode=disable",
+  ]
+}
+
+prometheus.scrape "postgres_default" {
+  targets         = prometheus.exporter.postgres.postgres_metrics.targets
+  forward_to      = [prometheus.remote_write.metrics.receiver]
+  scrape_interval = "15s"
+}
