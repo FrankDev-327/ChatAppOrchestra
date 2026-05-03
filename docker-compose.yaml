@@ -9,7 +9,8 @@ services:
     depends_on:
       - prometheus
       - grafana
-      - chat_sky_track_cronjobs
+      - db
+      #- chat_sky_track_cronjobs
     env_file:
       - ./TemporaryMsgApp/.env
     build:
@@ -18,32 +19,33 @@ services:
     networks:
       - chat_sky_track_app-network
       - grafana
+      - db_network  # add this
     volumes:
       - chat_sky_track_app:/app
       - alloy_chat_logs_app:/usr/src/app/logs
     restart: always
 
-  chat_sky_track_cronjobs:
-    image: chat_sky_track_cronjobs
-    container_name: ms_chat_sky_track_cronjobs
-    command: node dist/src/main
-    ports:
-      - "4000:4000"
-    depends_on:
-      - prometheus
-      - grafana
-    env_file:
-      - ./chat-skytrack-cronjobs/.env
-    build:
-      context: ./chat-skytrack-cronjobs
-      dockerfile: Dockerfile
-    networks:
-      - chat_sky_track_cronjobs-network
-      - grafana
-    volumes:
-      - chat_sky_track_cronjobs:/app
-      - alloy_cron_jobs_logs_app:/usr/src/app/logs
-    restart: always
+  # chat_sky_track_cronjobs:
+  #   image: chat_sky_track_cronjobs
+  #   container_name: ms_chat_sky_track_cronjobs
+  #   command: node dist/src/main
+  #   ports:
+  #     - "4000:4000"
+  #   depends_on:
+  #     - prometheus
+  #     - grafana
+  #   env_file:
+  #     - ./chat-skytrack-cronjobs/.env
+  #   build:
+  #     context: ./chat-skytrack-cronjobs
+  #     dockerfile: Dockerfile
+  #   networks:
+  #     - chat_sky_track_cronjobs-network
+  #     - grafana
+  #   volumes:
+  #     - chat_sky_track_cronjobs:/app
+  #     - alloy_cron_jobs_logs_app:/usr/src/app/logs
+  #   restart: always
 
   notification-service:
     image: chat_notification-service
@@ -55,6 +57,7 @@ services:
       - prometheus
       - grafana
       - chat_sky_track_app
+      - db
     env_file:
       - ./notification-service/.env
     build:
@@ -63,6 +66,7 @@ services:
     networks:
       - notification-service-network
       - grafana
+      - db_network  # add this
     volumes:
       - notification-service:/app
       - alloy_notification_logs_app:/usr/src/app/logs
@@ -132,7 +136,7 @@ services:
     networks:
     - notification-service-network 
     - chat_sky_track_app-network   
-    - chat_sky_track_cronjobs-network
+    #- chat_sky_track_cronjobs-network
     restart: unless-stopped
 
   pushgateway:
@@ -142,7 +146,7 @@ services:
       - "9091:9091"
     networks:
       - grafana
-      - chat_sky_track_cronjobs-network
+      #- chat_sky_track_cronjobs-network
     restart: always
 
   db:
@@ -169,7 +173,7 @@ services:
         ipv4_address: 10.5.0.10
       grafana:
       chat_sky_track_app-network:
-      chat_sky_track_cronjobs-network:
+      #chat_sky_track_cronjobs-network:
     restart: always
 
   prometheus:
@@ -189,7 +193,7 @@ services:
     networks:
       - grafana
       - chat_sky_track_app-network
-      - chat_sky_track_cronjobs-network
+     # - chat_sky_track_cronjobs-network
     restart: always
 
   grafana:
@@ -215,7 +219,7 @@ volumes:
   pg_db_data:
   notification-service:
   chat_sky_track_app:
-  chat_sky_track_cronjobs:
+  #chat_sky_track_cronjobs:
   grafana_data:
   prometheus_data:
   alloy_chat_logs_app:
@@ -229,8 +233,8 @@ networks:
   chat_sky_track_app-network:
     driver: bridge
 
-  chat_sky_track_cronjobs-network:
-    driver: bridge
+  #chat_sky_track_cronjobs-network:
+    #driver: bridge
 
   grafana:
     driver: bridge
