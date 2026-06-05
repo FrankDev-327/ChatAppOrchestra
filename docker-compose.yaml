@@ -3,7 +3,6 @@ services:
   chat_sky_track_app:
     image: chat_sky_track_app
     container_name: ms_chat_sky_track_app
-    command: node dist/src/main
     ports:
       - "3001:3001"
     depends_on:
@@ -20,6 +19,7 @@ services:
       - chat_sky_track_app-network
       - grafana
       - db_network  # add this
+      - elascticsearch_network
     volumes:
       - chat_sky_track_app:/app
       - alloy_chat_logs_app:/usr/src/app/logs
@@ -163,18 +163,18 @@ services:
       - "5432:5432"
     volumes:
       - pg_db_data:/var/lib/postgresql/data
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
-    command: >
-      -c config_file=/etc/postgresql/postgresql.conf
-      -c hba_file=/etc/postgresql/pg_hba.conf
     networks:
       db_network:
         ipv4_address: 10.5.0.10
       grafana:
       chat_sky_track_app-network:
-      #chat_sky_track_cronjobs-network:
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER_NAME} -d ${DATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   prometheus:
     image: prom/prometheus
@@ -213,10 +213,41 @@ services:
       - grafana
       - db_network
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false  
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - grafana
+      #- db_network
+      - elascticsearch_network
+    restart: always
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - elascticsearch_network
+    restart: always
+
 volumes:
   loki_data:
   n8n_data:
   pg_db_data:
+  elasticsearch_data:
   notification-service:
   chat_sky_track_app:
   #chat_sky_track_cronjobs:
@@ -237,6 +268,9 @@ networks:
     #driver: bridge
 
   grafana:
+    driver: bridge
+  
+  elascticsearch_network:
     driver: bridge
 
   db_network:
